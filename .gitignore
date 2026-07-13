@@ -1,3 +1,7 @@
 iot_anomaly_detection.tar
 
-iot_anomaly_detection.tar
+# Local / generated
+__pycache__/
+*.py[cod]
+.pytest_cache/
+mlruns/

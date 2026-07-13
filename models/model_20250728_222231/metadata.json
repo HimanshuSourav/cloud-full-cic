@@ -1,0 +1,26 @@
+{
+    "timestamp": "20250728_222231",
+    "results": {
+        "random_forest": {
+            "accuracy": 0.9996345667382646,
+            "precision": 0.9996276389925901,
+            "recall": 0.9996345667382646,
+            "f1": 0.9996291926664185
+        },
+        "xgboost": {
+            "accuracy": 0.9988468550407458,
+            "precision": 0.9988452320294263,
+            "recall": 0.9988468550407458,
+            "f1": 0.9988452468245781
+        },
+        "lightgbm": {
+            "accuracy": 0.9994924538031451,
+            "precision": 0.9994899705589783,
+            "recall": 0.9994924538031451,
+            "f1": 0.9994910957168753
+        }
+    },
+    "feature_names": null,
+    "label_encoder_classes": null,
+    "compression": "zlib level 3"
+}
