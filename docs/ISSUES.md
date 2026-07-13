@@ -18,7 +18,7 @@ This catalog reflects defects found in the Jul 2026 review. Fix work proceeds **
 | [ISS-01](#iss-01-feature-name-mismatch-train-vs-api) | Critical | Feature-name mismatch (train vs API) | Done |
 | [ISS-02](#iss-02-models-reloaded-on-every-request) | High | Models reloaded on every `/predict` | Done |
 | [ISS-03](#iss-03-trainserve-artifact-contract-drift) | Critical | Train/serve artifact contract drift | Done |
-| [ISS-04](#iss-04-scaler-fit-on-first-batch-only) | High | `StandardScaler` fit on first 10k rows only | Open |
+| [ISS-04](#iss-04-scaler-fit-on-first-batch-only) | High | `StandardScaler` fit on first 10k rows only | Done |
 | [ISS-05](#iss-05-bloated-serving-image--unpinned-deps) | Medium | Bloated serving image / unpinned deps | Open |
 | [ISS-06](#iss-06-suspiciously-high-metrics--verify--fix) | High | ~99.9% metrics — verify leakage / eval inflation, then fix | Open |
 | [ISS-07](#iss-07-duplicateexperimental-training-scripts) | Low | Duplicate / experimental training scripts | Open |
@@ -123,34 +123,27 @@ Serving assumed a **custom** preprocessor API (`preprocessor.label_encoder`, …
 ## ISS-04: Scaler fit on first batch only
 
 **Severity:** High  
-**Status:** Open  
-**Where:** `train_model.py` / `train_model_quantized.py` — `DataPreprocessor.preprocess_data`
+**Status:** Done  
+**Where:** `preproc_scale.py`, `train_model.py`, `train_model_quantized.py`, `mcp/preprocessor.py`
 
 ### Problem
 
-```python
-for i in range(0, len(X), self.batch_size):
-    batch = X.iloc[i:i + self.batch_size]
-    if i == 0:
-        scaled_batch = self.scaler.fit_transform(batch)  # fit on first 10k only
-    else:
-        scaled_batch = self.scaler.transform(batch)
-```
+Custom `DataPreprocessor` paths called `scaler.fit_transform` on the **first 10 000 rows only**, then `transform` on later batches. Mean/variance ignored most of the data.
 
-`StandardScaler` mean/variance are estimated from the **first 10 000 rows only**. Later rows are transformed with that partial fit, so scaling (and thus tree splits / distances) is biased whenever feature distributions differ across the file.
+### Fix applied
 
-`train_model_quantized_no_customclass.py` fits the scaler on the full processed matrix via `ColumnTransformer` — better for this issue. Prefer that trainer (canonical ISS-03 bundle) when addressing scaler bias in the custom preprocessor path.
+1. Added `preproc_scale.fit_transform_scaled`: **`scaler.fit(X)` on all rows**, then batch `transform`.
+2. Wired into `train_model.py` and `train_model_quantized.py`.
+3. Same fix inlined in `mcp/preprocessor.py`.
+4. Canonical serve trainer (`train_model_quantized_no_customclass.py`) already fits via `ColumnTransformer` on the full matrix — unchanged.
+5. Covered by `tests/test_iss04_scaler_fit.py`.
 
-### Probable fix
-
-1. **Preferred:** Fit scaler on a representative sample or full training split in one pass (or use `partial_fit` over all batches before a second transform pass).
-2. Or switch fully to the sklearn `Pipeline`/`ColumnTransformer` path and delete the broken batch-fit loop.
-3. Re-train and compare metrics / prediction sanity after the change.
+**Note:** Retrain is still required before custom-preprocessor metrics reflect this fix (see ISS-06). Bundles already produced with the sklearn path are unaffected by this scaler bug.
 
 ### Acceptance
 
-- Scaler `n_samples_seen_` (or equivalent) matches training-set size (or documented subsample policy).
-- Retrain completes; metrics remain plausible (see ISS-06).
+- [x] Scaler `n_samples_seen_` matches full frame length (unit test).
+- [ ] Full dataset retrain under custom preprocessor (optional; prefer ISS-06 honest eval on sklearn path).
 
 ---
 

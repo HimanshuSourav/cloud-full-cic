@@ -174,16 +174,13 @@ class DataPreprocessor:
                 X = pd.get_dummies(X, columns=cat_columns, dtype=np.int8)
 
             self.progress.update("Scaling features")
-            scaled_data = []
-            for i in tqdm(range(0, len(X), self.batch_size), desc="Scaling batches"):
-                batch = X.iloc[i:i + self.batch_size]
-                if i == 0:
-                    scaled_batch = self.scaler.fit_transform(batch)
-                else:
-                    scaled_batch = self.scaler.transform(batch)
-                scaled_data.append(scaled_batch)
+            # ISS-04: fit scaler on all rows (not only the first batch).
+            from preproc_scale import fit_transform_scaled
 
-            X = pd.DataFrame(np.vstack(scaled_data), columns=X.columns)
+            X, self.scaler = fit_transform_scaled(
+                X, self.scaler, batch_size=self.batch_size
+            )
+
             y = self.label_encoder.fit_transform(y)
             self.feature_names = X.columns
             return X, y
