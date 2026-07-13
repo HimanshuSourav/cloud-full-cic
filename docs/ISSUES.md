@@ -17,7 +17,7 @@ This catalog reflects defects found in the Jul 2026 review. Fix work proceeds **
 |----|----------|-------|--------|
 | [ISS-01](#iss-01-feature-name-mismatch-train-vs-api) | Critical | Feature-name mismatch (train vs API) | Done |
 | [ISS-02](#iss-02-models-reloaded-on-every-request) | High | Models reloaded on every `/predict` | Done |
-| [ISS-03](#iss-03-trainserve-artifact-contract-drift) | Critical | Train/serve artifact contract drift | Open |
+| [ISS-03](#iss-03-trainserve-artifact-contract-drift) | Critical | Train/serve artifact contract drift | Done |
 | [ISS-04](#iss-04-scaler-fit-on-first-batch-only) | High | `StandardScaler` fit on first 10k rows only | Open |
 | [ISS-05](#iss-05-bloated-serving-image--unpinned-deps) | Medium | Bloated serving image / unpinned deps | Open |
 | [ISS-06](#iss-06-suspiciously-high-metrics--verify--fix) | High | ~99.9% metrics — verify leakage / eval inflation, then fix | Open |
@@ -96,49 +96,27 @@ Every `/predict` reloaded all `.joblib` models plus the preprocessor from disk. 
 ## ISS-03: Train/serve artifact contract drift
 
 **Severity:** Critical  
-**Status:** Open  
-**Where:** `deploy_api.py`, `train_model*.py`, `models/model_20250728_222231/`
+**Status:** Done  
+**Where:** `model_bundle.py`, `deploy_api.py`, `train_model_quantized_no_customclass.py`, `models/model_20250728_222231/`
 
 ### Problem
 
-Serving assumes a **custom** preprocessor API:
+Serving assumed a **custom** preprocessor API (`preprocessor.label_encoder`, …) while the checked-in bundle is a sklearn **`ColumnTransformer`** plus standalone **`label_encoder.joblib`**, with null metadata fields. Train and serve had diverged.
 
-- `preprocessor.transform(df)`
-- `preprocessor.get_feature_names_out()`
-- `preprocessor.label_encoder.inverse_transform(...)` / `.classes_`
+### Fix applied (Option B)
 
-The checked-in bundle `model_20250728_222231` looks like the **sklearn Pipeline** training path (`train_model_quantized_no_customclass.py`):
-
-| Artifact | Present |
-|----------|---------|
-| `preprocessor.joblib` | Yes |
-| `label_encoder.joblib` | Yes (separate file) |
-| `metadata.json` → `feature_names` | `null` |
-| `metadata.json` → `label_encoder_classes` | `null` |
-
-So `deploy_api` may fail at runtime (`AttributeError` on `label_encoder` / `get_feature_names_out`) or behave incorrectly if the pickle is a `ColumnTransformer`/`Pipeline` without those attributes. Training and serving have diverged.
-
-### Probable fix
-
-Pick one contract and enforce it end-to-end:
-
-**Option A — Custom preprocessor (match `train_model.py`)**  
-- Save `DataPreprocessor` with embedded `label_encoder`.  
-- Populate `metadata.json` with `feature_names` and `label_encoder_classes`.  
-- Keep `deploy_api` attribute usage as-is (after ISS-01 naming fix).
-
-**Option B — Sklearn pipeline (match `*_no_customclass`)**  
-- Load `preprocessor.joblib` + `label_encoder.joblib` explicitly in the API.  
-- Use pipeline `transform`; decode labels via the standalone encoder.  
-- Store feature names and classes in metadata.
-
-Whichever option is chosen: add a small `load_bundle(path)` helper used by train (save) and serve (load), plus a smoke test that loads the checked-in (or freshly trained) bundle and runs one predict.
+1. Added shared `model_bundle.py` with `load_bundle` / `save_bundle` / `transform_raw` (`contract`: `sklearn_column_transformer_v1`).
+2. `deploy_api` loads a `ModelBundle` (preprocessor + label encoder + classifiers) and decodes via the standalone encoder.
+3. Request keys remap to ACI raw names (`Total Fwd Packet`, `Total Bwd packets`, …); missing raw columns are aligned (NaN-filled) before transform.
+4. `train_model_quantized_no_customclass.py` saves through `save_bundle` (populated metadata).
+5. Checked-in `metadata.json` backfilled with `input_feature_names`, `feature_names`, `label_encoder_classes`.
+6. Dockerfile copies `model_bundle.py`; tests in `tests/test_iss03_model_bundle.py`.
 
 ### Acceptance
 
-- Cold-start load of the current model dir succeeds.
-- One `/predict` returns a class string and probabilities without 500.
-- `metadata.json` is non-null for feature names and label classes after the next train.
+- [x] Cold-start load of the current model dir succeeds.
+- [x] One `/predict` returns a class string and probabilities without 500.
+- [x] `metadata.json` non-null for feature names and label classes (backfilled now; new trains write them).
 
 ---
 
@@ -161,7 +139,7 @@ for i in range(0, len(X), self.batch_size):
 
 `StandardScaler` mean/variance are estimated from the **first 10 000 rows only**. Later rows are transformed with that partial fit, so scaling (and thus tree splits / distances) is biased whenever feature distributions differ across the file.
 
-`train_model_quantized_no_customclass.py` fits the scaler on the full processed matrix via `ColumnTransformer` — better for this issue, but still subject to ISS-03 contract drift.
+`train_model_quantized_no_customclass.py` fits the scaler on the full processed matrix via `ColumnTransformer` — better for this issue. Prefer that trainer (canonical ISS-03 bundle) when addressing scaler bias in the custom preprocessor path.
 
 ### Probable fix
 

@@ -1,9 +1,10 @@
-"""ISS-01: request keys map to train-time spaced feature names."""
+"""ISS-01 / ISS-03: request keys map to ACI / bundle feature names."""
 
-from deploy_api import LEGACY_TO_CANONICAL, InputData, normalize_feature_keys
+from deploy_api import InputData
+from model_bundle import REQUEST_COLUMN_ALIASES, normalize_request_columns
 
 
-def test_normalize_legacy_keys():
+def test_normalize_legacy_and_plural_keys():
     legacy = {
         "Total_Fwd_Packets": 10.0,
         "Total_Backward_Packets": 8.0,
@@ -11,29 +12,28 @@ def test_normalize_legacy_keys():
         "Total_Length_of_Bwd_Packets": 1200.0,
         "Flow_Duration": 1000000.0,
     }
-    canonical = normalize_feature_keys(legacy)
-    assert set(canonical) == set(LEGACY_TO_CANONICAL.values())
+    canonical = normalize_request_columns(legacy)
+    assert canonical["Total Fwd Packet"] == 10.0
+    assert canonical["Total Bwd packets"] == 8.0
     assert "Total_Fwd_Packets" not in canonical
-    assert canonical["Total Fwd Packets"] == 10.0
 
 
-def test_inputdata_spaced_keys_to_feature_frame():
+def test_inputdata_aci_keys_to_feature_frame():
     payload = {
-        "Total Fwd Packets": 10.0,
-        "Total Backward Packets": 8.0,
-        "Total Length of Fwd Packets": 1500.0,
-        "Total Length of Bwd Packets": 1200.0,
+        "Total Fwd Packet": 10.0,
+        "Total Bwd packets": 8.0,
+        "Total Length of Fwd Packet": 1500.0,
+        "Total Length of Bwd Packet": 1200.0,
         "Flow Duration": 1000000.0,
     }
     frame = InputData(**payload).to_feature_frame()
     assert list(frame.columns) == [
-        "Total Fwd Packets",
-        "Total Backward Packets",
-        "Total Length of Fwd Packets",
-        "Total Length of Bwd Packets",
+        "Total Fwd Packet",
+        "Total Bwd packets",
+        "Total Length of Fwd Packet",
+        "Total Length of Bwd Packet",
         "Flow Duration",
     ]
-    assert frame.iloc[0]["Total Fwd Packets"] == 10.0
 
 
 def test_inputdata_legacy_underscore_keys_accepted():
@@ -45,6 +45,11 @@ def test_inputdata_legacy_underscore_keys_accepted():
         "Flow_Duration": 500.0,
     }
     frame = InputData(**payload).to_feature_frame()
-    assert "Total Fwd Packets" in frame.columns
-    assert "Total_Fwd_Packets" not in frame.columns
+    assert frame.iloc[0]["Total Fwd Packet"] == 3.0
     assert frame.iloc[0]["Flow Duration"] == 500.0
+    assert "Total_Fwd_Packets" not in frame.columns
+
+
+def test_plural_aliases_in_map():
+    assert REQUEST_COLUMN_ALIASES["Total Fwd Packets"] == "Total Fwd Packet"
+    assert REQUEST_COLUMN_ALIASES["Total Backward Packets"] == "Total Bwd packets"

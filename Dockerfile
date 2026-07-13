@@ -24,6 +24,7 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 COPY models/ ./models/
 COPY deploy_api.py ./
+COPY model_bundle.py ./
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

@@ -67,6 +67,9 @@ class ProgressLogger:
             f"ETA: {timedelta(seconds=int(eta))}"
         )
 
+from model_bundle import save_bundle
+
+
 class ModelTrainer:
     def __init__(self):
         self.models = {
@@ -127,37 +130,27 @@ class ModelDeployment:
         self.model_info = {}
         os.makedirs(base_path, exist_ok=True)
 
-    def save_models(self, models: Dict, preprocessor: Any, results: Dict) -> str:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_dir = os.path.join(self.base_path, f"model_{timestamp}")
-        os.makedirs(save_dir, exist_ok=True)
-        
-        # Save models with compression
-        for model_name, model in models.items():
-            model_path = os.path.join(save_dir, f"{model_name}.joblib")
-            joblib.dump(model, model_path, compress=('zlib', 3))  # Added compression
-        
-        # Save preprocessor with compression
-        preprocessor_path = os.path.join(save_dir, "preprocessor.joblib")
-        joblib.dump(preprocessor, preprocessor_path, compress=('zlib', 3))  # Added compression
-
-        metadata = {
-            "timestamp": timestamp,
-            "results": results,
-            "feature_names": preprocessor.feature_names.tolist() if hasattr(preprocessor, 'feature_names') else None,
-            "label_encoder_classes": preprocessor.label_encoder.classes_.tolist() if hasattr(preprocessor, 'label_encoder') else None,
-            "compression": "zlib level 3"  # Added compression info to metadata
-        }
-        
-        metadata_path = os.path.join(save_dir, "metadata.json")
-        with open(metadata_path, 'w') as f:
-            json.dump(metadata, f, indent=4)
-            
-        self.model_info[timestamp] = {
-            "path": save_dir,
-            "metadata": metadata
-        }
-        
+    def save_models(
+        self,
+        models: Dict,
+        preprocessor: Any,
+        results: Dict,
+        label_encoder: Any = None,
+        feature_names: Any = None,
+        input_feature_names: Any = None,
+    ) -> str:
+        if label_encoder is None:
+            raise ValueError("label_encoder is required for the ISS-03 serve contract")
+        save_dir = save_bundle(
+            models=models,
+            preprocessor=preprocessor,
+            label_encoder=label_encoder,
+            results=results,
+            base_path=self.base_path,
+            feature_names=feature_names,
+            input_feature_names=input_feature_names,
+        )
+        self.model_info[os.path.basename(save_dir)] = {"path": save_dir}
         return save_dir
 
 
@@ -279,16 +272,16 @@ def main():
 
             display_results(results)
 
-            # Step 11: Save models + pipeline + encoder
+            # Step 11: Save models + pipeline + encoder (canonical ISS-03 bundle)
             deployment = ModelDeployment()
             save_dir = deployment.save_models(
                 models=trainer.models,
                 preprocessor=preprocessor,
-                results=results
+                results=results,
+                label_encoder=label_encoder,
+                feature_names=feature_names,
+                input_feature_names=list(X.columns),
             )
-
-            # Save label encoder separately
-            joblib.dump(label_encoder, os.path.join(save_dir, "label_encoder.joblib"))
 
             print(f"Models and preprocessor saved to: {save_dir}")
 

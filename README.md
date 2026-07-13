@@ -31,6 +31,7 @@ docker-deploy/
 ├── train_model_quantized_no_customclass.py # Sklearn Pipeline / ColumnTransformer variant
 ├── quantize.py                             # TFLite float16 conversion script (experimental)
 ├── deploy_api.py                           # Production-oriented FastAPI app (used by Dockerfile)
+├── model_bundle.py                         # Shared load/save contract for model artifacts
 ├── Dockerfile                              # Multi-stage image for deploy_api
 ├── Original.Dockerfile                     # Earlier single-stage Dockerfile (legacy)
 ├── requirements.txt                        # Shared Python dependencies
@@ -150,24 +151,25 @@ Stored in `metadata.json` and in MLflow under `mlruns/`.
 | xgboost | 0.9988 | 0.9988 | 0.9988 | 0.9988 |
 | lightgbm | 0.9995 | 0.9995 | 0.9995 | 0.9995 |
 
-Artifact compression noted in metadata: **zlib level 3**.
+Artifact compression noted in metadata: **zlib level 3**.  
+Serve contract: `sklearn_column_transformer_v1` (see `model_bundle.py`).
 
-> Note: This bundle includes a standalone `label_encoder.joblib`, which matches the `train_model_quantized_no_customclass.py` save pattern.
+> This bundle includes a standalone `label_encoder.joblib`, matching `train_model_quantized_no_customclass.py` / `save_bundle`.
 
 ---
 
 ## 6. Model artifact bundle
 
-Each run creates:
+Canonical layout (ISS-03), written by `model_bundle.save_bundle`:
 
 ```text
 models/model_<YYYYMMDD_HHMMSS>/
 ├── random_forest.joblib
 ├── xgboost.joblib
 ├── lightgbm.joblib
-├── preprocessor.joblib
-├── metadata.json
-└── label_encoder.joblib   # present when using the no_customclass training script
+├── preprocessor.joblib      # ColumnTransformer
+├── label_encoder.joblib     # required for label decode at serve
+└── metadata.json
 ```
 
 `metadata.json` fields:
@@ -175,12 +177,14 @@ models/model_<YYYYMMDD_HHMMSS>/
 | Field | Description |
 |-------|-------------|
 | `timestamp` | Same stamp as folder name |
+| `contract` | `sklearn_column_transformer_v1` |
 | `results` | Per-model metrics |
-| `feature_names` | May be populated or `null` depending on preprocessor type |
-| `label_encoder_classes` | May be populated or `null` if encoder is saved separately |
+| `input_feature_names` | Raw columns expected by the preprocessor |
+| `feature_names` | Post-transform feature names |
+| `label_encoder_classes` | Class label strings |
 | `compression` | Joblib compression setting |
 
-Serving (`deploy_api.py`) selects the latest directory name under `models/` (string sort descending) and loads every `*.joblib` except treating `preprocessor.joblib` as the preprocessor. Other joblibs (including `label_encoder.joblib` if present) are loaded into the models map by basename.
+Serving loads the latest `models/model_*` folder via `model_bundle.load_latest_bundle` (startup cache).
 
 ---
 
@@ -204,7 +208,7 @@ docker run --rm -p 8000:8000 iot-anomaly-api
 Image behavior:
 
 - Multi-stage build (`builder` + slim runtime).
-- Copies `models/` and `deploy_api.py`.
+- Copies `models/`, `deploy_api.py`, and `model_bundle.py`.
 - Installs `libgomp1` for LightGBM.
 - Entrypoint: `uvicorn deploy_api:app --host 0.0.0.0 --port 8000`.
 
@@ -216,19 +220,19 @@ Query parameter:
 |-------|---------|-------------|
 | `model_name` | `random_forest` | One of `random_forest`, `xgboost`, `lightgbm` |
 
-JSON body (Pydantic `InputData` — **spaced** CICFlowMeter / train-time column names):
+JSON body (Pydantic `InputData` — **ACI-IoT raw column names**; plural/underscore aliases still accepted):
 
 ```json
 {
-  "Total Fwd Packets": 10.0,
-  "Total Backward Packets": 8.0,
-  "Total Length of Fwd Packets": 1500.0,
-  "Total Length of Bwd Packets": 1200.0,
+  "Total Fwd Packet": 10.0,
+  "Total Bwd packets": 8.0,
+  "Total Length of Fwd Packet": 1500.0,
+  "Total Length of Bwd Packet": 1200.0,
   "Flow Duration": 1000000.0
 }
 ```
 
-Legacy underscored keys (`Total_Fwd_Packets`, …) are still accepted and remapped server-side (see ISS-01).
+Other preprocessor input columns are filled as missing (NaN → imputer) when omitted. For production-quality scores, send the full raw feature set listed in `metadata.input_feature_names`.
 
 Example response shape:
 
