@@ -16,7 +16,7 @@ This catalog reflects defects found in the Jul 2026 review. Fix work proceeds **
 | ID | Severity | Issue | Status |
 |----|----------|-------|--------|
 | [ISS-01](#iss-01-feature-name-mismatch-train-vs-api) | Critical | Feature-name mismatch (train vs API) | Done |
-| [ISS-02](#iss-02-models-reloaded-on-every-request) | High | Models reloaded on every `/predict` | Open |
+| [ISS-02](#iss-02-models-reloaded-on-every-request) | High | Models reloaded on every `/predict` | Done |
 | [ISS-03](#iss-03-trainserve-artifact-contract-drift) | Critical | Train/serve artifact contract drift | Open |
 | [ISS-04](#iss-04-scaler-fit-on-first-batch-only) | High | `StandardScaler` fit on first 10k rows only | Open |
 | [ISS-05](#iss-05-bloated-serving-image--unpinned-deps) | Medium | Bloated serving image / unpinned deps | Open |
@@ -71,23 +71,25 @@ Note: MLflow input examples in this repo also show singular variants (`Total Fwd
 ## ISS-02: Models reloaded on every request
 
 **Severity:** High  
-**Status:** Open  
-**Where:** `deploy_api.py` — `predict()` constructs `ModelDeployment()` and calls `load_latest_model()` per request
+**Status:** Done  
+**Where:** `deploy_api.py` — previously `predict()` constructed `ModelDeployment()` and called `load_latest_model()` per request
 
 ### Problem
 
-Every `/predict` reloads all `.joblib` models plus the preprocessor from disk. That adds large latency, disk I/O, and risk of inconsistent state under concurrent load. Model files are multi‑MB (`random_forest.joblib` alone is ~8.5 MB).
+Every `/predict` reloaded all `.joblib` models plus the preprocessor from disk. That added large latency, disk I/O, and risk of inconsistent state under concurrent load. Model files are multi‑MB (`random_forest.joblib` alone is ~8.5 MB).
 
-### Probable fix
+### Fix applied
 
-1. Load models + preprocessor **once at startup** (module-level or FastAPI lifespan/`@app.on_event("startup")`).
-2. Keep them in process memory; optional env var for model directory / which classifier is default.
-3. Add `/health` (process up) and `/ready` (artifacts loaded) endpoints.
+1. FastAPI `lifespan` loads artifacts once into a process-wide cache (`load_artifacts_into_cache`).
+2. `/predict` reads from that cache only; returns **503** if startup load failed.
+3. Env vars: `MODEL_BASE_PATH` (default `models`), `DEFAULT_MODEL_NAME` (default `random_forest`).
+4. Added `GET /health` (liveness) and `GET /ready` (artifacts loaded).
+5. Covered by `tests/test_iss02_startup_cache.py` (mock load; assert single call across two predicts).
 
 ### Acceptance
 
-- Second request does not re-read joblib files from disk (log once at startup only).
-- Latency for warm `/predict` drops vs cold per-request load.
+- [x] Second `/predict` does not call `load_latest_model` again (unit test).
+- [x] `/health` and `/ready` endpoints present.
 
 ---
 

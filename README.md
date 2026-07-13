@@ -245,12 +245,20 @@ OpenAPI docs: `http://localhost:8000/docs` when the server is running.
 
 ### Runtime load behavior
 
-On each `/predict` call the handler currently:
+At **process startup** (FastAPI lifespan):
 
-1. Instantiates `ModelDeployment`
-2. Discovers the latest model folder
-3. Loads all model joblibs + preprocessor
-4. Transforms input and predicts
+1. Discovers the latest `models/model_*` folder under `MODEL_BASE_PATH` (default `models`)
+2. Loads all classifier joblibs + preprocessor into memory once
+
+Each `/predict` reuses that cache (no per-request disk reload).  
+Also available: `GET /health` (liveness), `GET /ready` (artifacts loaded).
+
+Optional env:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MODEL_BASE_PATH` | `models` | Root directory containing `model_*` folders |
+| `DEFAULT_MODEL_NAME` | `random_forest` | Classifier used when `model_name` query param omitted |
 
 ---
 

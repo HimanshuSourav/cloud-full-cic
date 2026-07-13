@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 import uvicorn
 from pydantic import BaseModel, Field
@@ -5,14 +6,33 @@ import pandas as pd
 import joblib
 import os
 import logging
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Process-wide artifact cache (ISS-02): loaded once at startup, reused by /predict.
+MODEL_BASE_PATH = os.environ.get("MODEL_BASE_PATH", "models")
+DEFAULT_MODEL_NAME = os.environ.get("DEFAULT_MODEL_NAME", "random_forest")
+
+_models: Dict[str, Any] = {}
+_preprocessor: Any = None
+_model_dir: Optional[str] = None
+_ready: bool = False
+_load_error: Optional[str] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load model artifacts once when the app starts."""
+    load_artifacts_into_cache(MODEL_BASE_PATH)
+    yield
+
 
 app = FastAPI(
     title="IoT Network Anomaly Detection API",
     description="API for detecting network anomalies in IoT devices",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Canonical CICFlowMeter / training column names (spaced).
@@ -132,7 +152,7 @@ class ModelDeployment:
         os.makedirs(base_path, exist_ok=True)
 
     def load_latest_model(self):
-        """Load the latest saved model and preprocessor."""
+        """Load the latest saved model and preprocessor from disk."""
         try:
             model_folders = [
                 f
@@ -161,19 +181,76 @@ class ModelDeployment:
             preprocessor = joblib.load(preprocessor_path)
             logging.info(f"Loaded preprocessor from {preprocessor_path}")
 
-            return models, preprocessor
+            return models, preprocessor, latest_model_dir
         except Exception as e:
             logging.error(f"Error loading models: {str(e)}")
             raise
 
 
-@app.post("/predict")
-async def predict(input_data: InputData, model_name: str = "random_forest"):
-    """FastAPI endpoint for making predictions."""
+def load_artifacts_into_cache(base_path: str = MODEL_BASE_PATH) -> None:
+    """Load artifacts once into module-level cache (idempotent until process exits)."""
+    global _models, _preprocessor, _model_dir, _ready, _load_error
     try:
-        deployment = ModelDeployment()
-        models, preprocessor = deployment.load_latest_model()
+        models, preprocessor, model_dir = ModelDeployment(base_path).load_latest_model()
+        _models = models
+        _preprocessor = preprocessor
+        _model_dir = model_dir
+        _ready = True
+        _load_error = None
+        logging.info(
+            "Artifacts cached for serving (dir=%s, models=%s)",
+            model_dir,
+            sorted(models.keys()),
+        )
+    except Exception as e:
+        _models = {}
+        _preprocessor = None
+        _model_dir = None
+        _ready = False
+        _load_error = str(e)
+        logging.error("Failed to cache artifacts at startup: %s", e)
 
+
+def get_cached_artifacts():
+    """Return (models, preprocessor) from the startup cache."""
+    return _models, _preprocessor
+
+
+@app.get("/health")
+async def health():
+    """Liveness: process is up (does not require models loaded)."""
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness: model artifacts are loaded into memory."""
+    if not _ready:
+        raise HTTPException(
+            status_code=503,
+            detail=_load_error or "Model artifacts not loaded",
+        )
+    return {
+        "status": "ready",
+        "model_dir": _model_dir,
+        "models": sorted(_models.keys()),
+    }
+
+
+@app.post("/predict")
+async def predict(input_data: InputData, model_name: Optional[str] = None):
+    """FastAPI endpoint for making predictions (uses startup-cached artifacts)."""
+    if model_name is None:
+        model_name = DEFAULT_MODEL_NAME
+
+    try:
+        if not _ready or _preprocessor is None:
+            raise HTTPException(
+                status_code=503,
+                detail=_load_error or "Model artifacts not loaded",
+            )
+
+        models, preprocessor = get_cached_artifacts()
         model = models.get(model_name)
         if not model:
             raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found.")
@@ -181,8 +258,9 @@ async def predict(input_data: InputData, model_name: str = "random_forest"):
         input_df = input_data.to_feature_frame()
 
         if hasattr(preprocessor, "get_feature_names_out"):
-            logging.info(
-                f"Feature names after preprocessing: {preprocessor.get_feature_names_out()}"
+            logging.debug(
+                "Feature names after preprocessing: %s",
+                preprocessor.get_feature_names_out(),
             )
 
         X_input = preprocessor.transform(input_df)
