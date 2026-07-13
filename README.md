@@ -34,7 +34,9 @@ docker-deploy/
 ├── model_bundle.py                         # Shared load/save contract for model artifacts
 ├── Dockerfile                              # Multi-stage image for deploy_api
 ├── Original.Dockerfile                     # Earlier single-stage Dockerfile (legacy)
-├── requirements.txt                        # Shared Python dependencies
+├── requirements-serve.txt                  # Pinned deps for Docker / API
+├── requirements-train.txt                  # Pinned deps for training (+ serve)
+├── requirements.txt                        # Alias → requirements-train.txt
 ├── models/
 │   └── model_20250728_222231/              # Currently checked-in model bundle
 ├── mlruns/                                 # Local MLflow run store
@@ -303,12 +305,23 @@ These are not required for the baseline train → Docker serve path.
 
 ## 10. Dependencies
 
-From `requirements.txt` (unpinned as of this baseline):
+Split and pinned (ISS-05):
 
-- Training / experiment: tensorflow, numpy, pandas, scikit-learn, xgboost, lightgbm, matplotlib, seaborn, mlflow, tqdm, joblib  
-- Serving: fastapi, uvicorn (+ joblib, sklearn family models)
+| File | Use |
+|------|-----|
+| `requirements-serve.txt` | Docker / FastAPI serving (numpy, pandas, scikit-learn, xgboost, lightgbm, joblib, fastapi, uvicorn, pydantic) |
+| `requirements-train.txt` | Local training & experiments (`-r` serve + tqdm, matplotlib, seaborn, mlflow, tensorflow) |
+| `requirements.txt` | Alias → `requirements-train.txt` (backward compatible) |
 
-Docker additionally runs `pip install lightgbm xgboost` in the builder stage and installs `libgomp1` in the runtime stage.
+```bash
+# Serve / API
+pip install -r requirements-serve.txt
+
+# Train locally
+pip install -r requirements-train.txt
+```
+
+Docker installs **only** `requirements-serve.txt` (Python 3.12 slim) and runtime `libgomp1` for LightGBM.
 
 ---
 

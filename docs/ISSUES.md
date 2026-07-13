@@ -19,7 +19,7 @@ This catalog reflects defects found in the Jul 2026 review. Fix work proceeds **
 | [ISS-02](#iss-02-models-reloaded-on-every-request) | High | Models reloaded on every `/predict` | Done |
 | [ISS-03](#iss-03-trainserve-artifact-contract-drift) | Critical | Train/serve artifact contract drift | Done |
 | [ISS-04](#iss-04-scaler-fit-on-first-batch-only) | High | `StandardScaler` fit on first 10k rows only | Done |
-| [ISS-05](#iss-05-bloated-serving-image--unpinned-deps) | Medium | Bloated serving image / unpinned deps | Open |
+| [ISS-05](#iss-05-bloated-serving-image--unpinned-deps) | Medium | Bloated serving image / unpinned deps | Done |
 | [ISS-06](#iss-06-suspiciously-high-metrics--verify--fix) | High | ~99.9% metrics — verify leakage / eval inflation, then fix | Open |
 | [ISS-07](#iss-07-duplicateexperimental-training-scripts) | Low | Duplicate / experimental training scripts | Open |
 | [ISS-08](#iss-08-api-error-handling--observability) | Low | Opaque 500s; no health/ready endpoints | Open |
@@ -150,30 +150,28 @@ Custom `DataPreprocessor` paths called `scaler.fit_transform` on the **first 10�
 ## ISS-05: Bloated serving image & unpinned deps
 
 **Severity:** Medium  
-**Status:** Open  
-**Where:** `requirements.txt`, `Dockerfile`
+**Status:** Done  
+**Where:** `requirements-serve.txt`, `requirements-train.txt`, `requirements.txt`, `Dockerfile`
 
 ### Problem
 
-- `requirements.txt` includes **training / experiment** stacks unused at serve time: `tensorflow`, `mlflow`, `matplotlib`, `seaborn`, etc.
-- Packages are **unpinned**; builds are non-reproducible.
-- Duplicates in the file (`pandas`, `scikit-learn`, `joblib` listed twice).
-- Dockerfile also runs `pip install lightgbm xgboost` again after installing from requirements.
+- Single unpinned `requirements.txt` pulled TensorFlow / MLflow / plotting into the serve image.
+- Duplicate package lines; redundant `pip install lightgbm xgboost` in Docker.
 
-Serving only needs: FastAPI, uvicorn, pandas/numpy, joblib, scikit-learn, xgboost, lightgbm (and runtime `libgomp1`).
+### Fix applied
 
-### Probable fix
-
-1. Split deps: `requirements-train.txt` vs `requirements-serve.txt` (pinned versions).
-2. Dockerfile `COPY` only serve requirements; drop TensorFlow/MLflow/plotting from the image.
-3. Remove redundant second `pip install lightgbm xgboost` if already in serve requirements.
-4. Optionally multi-stage copy of site-packages is already present — keep it once deps are lean.
+1. Split pinned deps:
+   - `requirements-serve.txt` — FastAPI stack + sklearn/xgb/lgbm only
+   - `requirements-train.txt` — `-r requirements-serve.txt` plus tqdm, matplotlib, seaborn, mlflow, tensorflow
+   - `requirements.txt` — thin alias to train file for backward compatibility
+2. Dockerfile installs **only** `requirements-serve.txt`; removed second lightgbm/xgboost install.
+3. Base image bumped to `python:3.12-slim` to match pinned sklearn 1.7 / local env.
 
 ### Acceptance
 
-- Image builds with serve-only deps.
-- Image size materially smaller than current training-heavy install.
-- Container still serves `/predict` for RF / XGB / LGBM.
+- [x] Serve requirements exclude TensorFlow / MLflow / plotting.
+- [x] Dockerfile copies serve-only requirements; no duplicate pip of boost libs.
+- [x] Image builds (`iot-anomaly-serve:iss05`); `/health`, `/ready`, `/predict` smoke OK (~1.18 GB — still includes xgboost’s optional CUDA NCCL wheel; CPU-only slim further is a follow-up).
 
 ---
 

@@ -1,0 +1,12 @@
+# Serve-only dependencies for deploy_api / Docker (ISS-05).
+# Keep this lean: no TensorFlow, MLflow, or plotting stacks.
+
+numpy==2.0.2
+pandas==2.2.3
+scikit-learn==1.7.0
+xgboost==2.1.3
+lightgbm==4.5.0
+joblib==1.4.2
+fastapi==0.115.7
+uvicorn==0.34.0
+pydantic==2.10.6

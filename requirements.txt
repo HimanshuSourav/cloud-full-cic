@@ -1,16 +1,4 @@
-tensorflow
-numpy
-pandas
-scikit-learn
-xgboost
-lightgbm
-matplotlib
-seaborn
-mlflow
-tqdm
-joblib
-fastapi
-uvicorn
-pandas
-scikit-learn
-joblib
+# Backward-compatible entrypoint. Prefer the split files:
+#   requirements-serve.txt  — Docker / FastAPI serving
+#   requirements-train.txt  — local training & experiments
+-r requirements-train.txt
