@@ -203,6 +203,10 @@ def save_bundle(
     feature_names: Optional[Iterable[str]] = None,
     input_feature_names: Optional[Iterable[str]] = None,
     compress: Any = ("zlib", 3),
+    evaluation_protocol: str = CONTRACT_ID,
+    dropped_columns: Optional[Iterable[str]] = None,
+    classification_reports: Optional[Mapping[str, Any]] = None,
+    confusion_matrices: Optional[Mapping[str, Any]] = None,
 ) -> str:
     """Persist artifacts in the canonical layout; return save directory."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -237,16 +241,54 @@ def save_bundle(
         if feature_names is not None
         else None
     )
-    # Do not fall back to ColumnTransformer get_feature_names_out() here — those
-    # prefixed names often disagree with the DataFrame columns used to fit models.
+
+    if classification_reports:
+        with open(
+            os.path.join(save_dir, "classification_reports.json"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(classification_reports, f, indent=2)
+
+    if confusion_matrices:
+        with open(
+            os.path.join(save_dir, "confusion_matrices.json"),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(confusion_matrices, f, indent=2)
+
+    # Strip heavy nested reports from results if present (keep scalar metrics).
+    clean_results = {}
+    for model_name, metrics in dict(results).items():
+        if isinstance(metrics, Mapping):
+            clean_results[model_name] = {
+                k: float(v) if isinstance(v, (int, float, np.floating)) else v
+                for k, v in metrics.items()
+                if k
+                not in {
+                    "classification_report",
+                    "confusion_matrix",
+                }
+            }
+        else:
+            clean_results[model_name] = metrics
+
     metadata = {
         "timestamp": timestamp,
-        "results": dict(results),
+        "results": clean_results,
         "contract": CONTRACT_ID,
+        "evaluation_protocol": evaluation_protocol,
+        "dropped_columns": list(dropped_columns) if dropped_columns is not None else None,
         "input_feature_names": resolved_input,
         "feature_names": resolved_features,
         "label_encoder_classes": [str(c) for c in label_encoder.classes_],
         "compression": "zlib level 3",
+        "notes": (
+            "ISS-06: train-only preprocessor fit; see docs/ISS06_VERIFICATION.md. "
+            "Checked-in ~99.9% leaky-protocol scores remain historically accurate on ACI "
+            "but use evaluation_protocol for release comparisons."
+        ),
     }
     with open(os.path.join(save_dir, "metadata.json"), "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=4)

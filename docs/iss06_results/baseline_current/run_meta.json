@@ -1,0 +1,33 @@
+{
+  "phase": 1,
+  "csv_path": "/home/hsourav/ml/ACI-IoT-2023.csv",
+  "max_rows": 150000,
+  "min_class_count": 20,
+  "random_state": 42,
+  "n_estimators": 100,
+  "n_rows_used": 149999,
+  "dropped_rare_labels": [
+    "ARP Spoofing"
+  ],
+  "dropped_feature_cols": [
+    "Flow Bytes/s",
+    "Flow Packets/s",
+    "Flow ID",
+    "Src IP",
+    "Dst IP",
+    "Timestamp"
+  ],
+  "label_counts_used": {
+    "Port Scan": 53753,
+    "Benign": 40112,
+    "ICMP Flood": 27436,
+    "Ping Sweep": 8762,
+    "DNS Flood": 5717,
+    "Vulnerability Scan": 4816,
+    "OS Scan": 4571,
+    "Slowloris": 2271,
+    "SYN Flood": 1688,
+    "Dictionary Attack": 777,
+    "UDP Flood": 96
+  }
+}

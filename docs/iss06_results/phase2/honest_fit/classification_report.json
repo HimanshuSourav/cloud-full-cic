@@ -1,0 +1,81 @@
+{
+  "Benign": {
+    "precision": 0.9977598008711885,
+    "recall": 0.999252150068553,
+    "f1-score": 0.9985054178602566,
+    "support": 8023.0
+  },
+  "DNS Flood": {
+    "precision": 0.9991204925241864,
+    "recall": 0.9938757655293088,
+    "f1-score": 0.9964912280701754,
+    "support": 1143.0
+  },
+  "Dictionary Attack": {
+    "precision": 0.9935897435897436,
+    "recall": 1.0,
+    "f1-score": 0.9967845659163987,
+    "support": 155.0
+  },
+  "ICMP Flood": {
+    "precision": 0.9996355020958629,
+    "recall": 0.9996355020958629,
+    "f1-score": 0.9996355020958629,
+    "support": 5487.0
+  },
+  "OS Scan": {
+    "precision": 0.9989035087719298,
+    "recall": 0.9967177242888403,
+    "f1-score": 0.9978094194961665,
+    "support": 914.0
+  },
+  "Ping Sweep": {
+    "precision": 1.0,
+    "recall": 0.9994295493439818,
+    "f1-score": 0.9997146932952924,
+    "support": 1753.0
+  },
+  "Port Scan": {
+    "precision": 0.999720852330883,
+    "recall": 0.999348897776951,
+    "f1-score": 0.9995348404502744,
+    "support": 10751.0
+  },
+  "SYN Flood": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 338.0
+  },
+  "Slowloris": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1-score": 1.0,
+    "support": 454.0
+  },
+  "UDP Flood": {
+    "precision": 1.0,
+    "recall": 0.9473684210526315,
+    "f1-score": 0.972972972972973,
+    "support": 19.0
+  },
+  "Vulnerability Scan": {
+    "precision": 0.9979253112033195,
+    "recall": 0.9989615784008308,
+    "f1-score": 0.9984431759211209,
+    "support": 963.0
+  },
+  "accuracy": 0.9990666666666667,
+  "macro avg": {
+    "precision": 0.9987868373988286,
+    "recall": 0.9940535989597237,
+    "f1-score": 0.9963538014616838,
+    "support": 30000.0
+  },
+  "weighted avg": {
+    "precision": 0.9990675593572256,
+    "recall": 0.9990666666666667,
+    "f1-score": 0.9990661350079887,
+    "support": 30000.0
+  }
+}

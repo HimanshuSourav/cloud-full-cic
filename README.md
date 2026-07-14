@@ -38,7 +38,8 @@ docker-deploy/
 ├── requirements-train.txt                  # Pinned deps for training (+ serve)
 ├── requirements.txt                        # Alias → requirements-train.txt
 ├── models/
-│   └── model_20250728_222231/              # Currently checked-in model bundle
+│   ├── model_20260713_162252/              # Honest-protocol release bundle (latest)
+│   └── model_20250728_222231/              # Historical leaky-protocol bundle
 ├── mlruns/                                 # Local MLflow run store
 ├── mcp/                                    # Alternate FastAPI + MCP-style wrapper (separate nested git repo)
 └── iot_anomaly_detection.tar               # Large Docker image archive (gitignored)
@@ -97,7 +98,17 @@ ACI-IoT-2023.csv  -->  enhance features  -->  preprocess / scale
 | `Total Length of Bwd Packets` | Backward byte volume |
 | `Flow Duration` | Flow duration (microseconds in schema descriptions) |
 
-Training scripts also consume the rest of the CSV after dropping the list above. Categorical columns are one-hot encoded during fit.
+Training scripts also consume the rest of the CSV after dropping non-feature / ID-like columns.
+
+### Columns dropped for the canonical (ISS-06) trainer
+
+| Column | Reason |
+|--------|--------|
+| `Flow ID`, `Src IP`, `Dst IP`, `Timestamp` | Identifiers / time |
+| `Flow Bytes/s`, `Flow Packets/s` | Rate fields (legacy drop) |
+| `Src Port`, `Dst Port` | High-importance but lab-leaky ports (Phase 2 ablation) |
+
+Canonical raw ACI names used at serve time include singular forms such as `Total Fwd Packet`, `Total Bwd packets` (see OpenAPI / `model_bundle.REQUEST_COLUMN_ALIASES`).
 
 ### Derived features (when inputs exist)
 
@@ -110,23 +121,19 @@ Training scripts also consume the rest of the CSV after dropping the list above.
 
 ### Prerequisites
 
-- Python 3.9+ recommended (Dockerfile uses `python:3.9-slim`).
+- Python 3.12 recommended (Dockerfile uses `python:3.12-slim`).
 - Dataset file at: `../ACI-IoT-2023.csv` relative to this repo.
-- Dependencies from `requirements.txt` (and XGBoost / LightGBM as also installed in Docker).
-
-```bash
-pip install -r requirements.txt
-```
+- Dependencies: `pip install -r requirements-train.txt` (or `requirements.txt` alias).
 
 ### Run training
 
-**Custom preprocessor path:**
+**Custom preprocessor path** (legacy / experiments):
 
 ```bash
 python train_model.py
 ```
 
-**Sklearn `ColumnTransformer` path** (also saves a separate `label_encoder.joblib`):
+**Canonical sklearn path** (ISS-03/06 — train-only preprocess, drop ports, per-class reports):
 
 ```bash
 python train_model_quantized_no_customclass.py
@@ -142,10 +149,25 @@ python train_model_quantized_no_customclass.py
 
 ### Metrics logged
 
-Per model: accuracy, precision, recall, F1 (weighted averages where applicable).  
-Stored in `metadata.json` and in MLflow under `mlruns/`.
+Per model: accuracy, precision, recall, F1 weighted + F1 macro.  
+Also `classification_reports.json` / `confusion_matrices.json` in the model folder.  
+Scalar metrics in `metadata.json` and MLflow under `mlruns/`.
 
-### Checked-in baseline metrics (`model_20250728_222231`)
+### Release metrics (`model_20260713_162252`, honest protocol)
+
+`evaluation_protocol: train_only_preprocess_v1` — split raw first, fit preprocess on train only, ports dropped.
+
+| Model | Accuracy | F1 weighted | F1 macro |
+|-------|----------|-------------|----------|
+| random_forest | 0.9990 | 0.9990 | 0.9079 |
+| xgboost | 0.9969 | 0.9969 | 0.9035 |
+| lightgbm | 0.9968 | 0.9968 | 0.8988 |
+
+Macro F1 is lower mainly due to ultra-rare **ARP Spoofing**. See [`docs/ISS06_VERIFICATION.md`](docs/ISS06_VERIFICATION.md).
+
+### Historical metrics (`model_20250728_222231`, leaky protocol)
+
+Fit-all-then-split; ports kept. Kept for comparison only.
 
 | Model | Accuracy | Precision | Recall | F1 |
 |-------|----------|-----------|--------|-----|
@@ -153,10 +175,7 @@ Stored in `metadata.json` and in MLflow under `mlruns/`.
 | xgboost | 0.9988 | 0.9988 | 0.9988 | 0.9988 |
 | lightgbm | 0.9995 | 0.9995 | 0.9995 | 0.9995 |
 
-Artifact compression noted in metadata: **zlib level 3**.  
 Serve contract: `sklearn_column_transformer_v1` (see `model_bundle.py`).
-
-> This bundle includes a standalone `label_encoder.joblib`, matching `train_model_quantized_no_customclass.py` / `save_bundle`.
 
 ---
 
@@ -169,8 +188,10 @@ models/model_<YYYYMMDD_HHMMSS>/
 ├── random_forest.joblib
 ├── xgboost.joblib
 ├── lightgbm.joblib
-├── preprocessor.joblib      # ColumnTransformer
+├── preprocessor.joblib      # ColumnTransformer (fit on train only)
 ├── label_encoder.joblib     # required for label decode at serve
+├── classification_reports.json
+├── confusion_matrices.json
 └── metadata.json
 ```
 
@@ -180,7 +201,9 @@ models/model_<YYYYMMDD_HHMMSS>/
 |-------|-------------|
 | `timestamp` | Same stamp as folder name |
 | `contract` | `sklearn_column_transformer_v1` |
-| `results` | Per-model metrics |
+| `evaluation_protocol` | e.g. `train_only_preprocess_v1` |
+| `dropped_columns` | Columns removed before fit |
+| `results` | Per-model scalar metrics |
 | `input_feature_names` | Raw columns expected by the preprocessor |
 | `feature_names` | Post-transform feature names |
 | `label_encoder_classes` | Class label strings |

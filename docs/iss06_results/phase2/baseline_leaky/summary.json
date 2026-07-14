@@ -1,0 +1,140 @@
+{
+  "config": "baseline_leaky",
+  "protocol": "leaky_fit_all_then_split",
+  "drop_ports": false,
+  "n_train": 119999,
+  "n_test": 30000,
+  "n_features": 79,
+  "metrics": {
+    "accuracy": 0.9990666666666667,
+    "precision_weighted": 0.999067152272384,
+    "recall_weighted": 0.9990666666666667,
+    "f1_weighted": 0.999065962915838,
+    "f1_macro": 0.9963801557843982
+  },
+  "label_classes": [
+    "Benign",
+    "DNS Flood",
+    "Dictionary Attack",
+    "ICMP Flood",
+    "OS Scan",
+    "Ping Sweep",
+    "Port Scan",
+    "SYN Flood",
+    "Slowloris",
+    "UDP Flood",
+    "Vulnerability Scan"
+  ],
+  "port_feature_importances": [
+    {
+      "feature": "Src Port",
+      "importance": 0.07565908390040615
+    },
+    {
+      "feature": "Dst Port",
+      "importance": 0.04637926906184761
+    }
+  ],
+  "top_feature_importances": [
+    {
+      "feature": "Idle Max",
+      "importance": 0.08517570833087039
+    },
+    {
+      "feature": "Src Port",
+      "importance": 0.07565908390040615
+    },
+    {
+      "feature": "Idle Min",
+      "importance": 0.07564820496974872
+    },
+    {
+      "feature": "Idle Mean",
+      "importance": 0.07120319270511496
+    },
+    {
+      "feature": "Fwd Seg Size Min",
+      "importance": 0.06121701164847299
+    },
+    {
+      "feature": "Fwd Header Length",
+      "importance": 0.05186262510345294
+    },
+    {
+      "feature": "Dst Port",
+      "importance": 0.04637926906184761
+    },
+    {
+      "feature": "RST Flag Count",
+      "importance": 0.038033428960604
+    },
+    {
+      "feature": "Average Packet Size",
+      "importance": 0.0375445773710916
+    },
+    {
+      "feature": "FWD Init Win Bytes",
+      "importance": 0.031139269920106277
+    },
+    {
+      "feature": "SYN Flag Count",
+      "importance": 0.030293248975621377
+    },
+    {
+      "feature": "Fwd Packet Length Max",
+      "importance": 0.025916825918688713
+    },
+    {
+      "feature": "Packet Length Max",
+      "importance": 0.02556050937892772
+    },
+    {
+      "feature": "Packet Length Mean",
+      "importance": 0.025371129971192796
+    },
+    {
+      "feature": "Protocol",
+      "importance": 0.024754495580984838
+    },
+    {
+      "feature": "Fwd Packet Length Mean",
+      "importance": 0.021924859056339105
+    },
+    {
+      "feature": "Fwd Segment Size Avg",
+      "importance": 0.021010779815707807
+    },
+    {
+      "feature": "Flow IAT Min",
+      "importance": 0.0202503265466451
+    },
+    {
+      "feature": "Total Length of Fwd Packet",
+      "importance": 0.01768703328219182
+    },
+    {
+      "feature": "Fwd IAT Mean",
+      "importance": 0.014335737868193343
+    },
+    {
+      "feature": "Fwd IAT Min",
+      "importance": 0.01421565088953977
+    },
+    {
+      "feature": "Subflow Fwd Bytes",
+      "importance": 0.014042759009491543
+    },
+    {
+      "feature": "ACK Flag Count",
+      "importance": 0.011363436235428024
+    },
+    {
+      "feature": "Connection Type_wireless",
+      "importance": 0.010231621296412577
+    },
+    {
+      "feature": "Flow Duration",
+      "importance": 0.01018372118166367
+    }
+  ]
+}

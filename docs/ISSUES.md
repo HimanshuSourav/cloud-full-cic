@@ -20,7 +20,7 @@ This catalog reflects defects found in the Jul 2026 review. Fix work proceeds **
 | [ISS-03](#iss-03-trainserve-artifact-contract-drift) | Critical | Train/serve artifact contract drift | Done |
 | [ISS-04](#iss-04-scaler-fit-on-first-batch-only) | High | `StandardScaler` fit on first 10k rows only | Done |
 | [ISS-05](#iss-05-bloated-serving-image--unpinned-deps) | Medium | Bloated serving image / unpinned deps | Done |
-| [ISS-06](#iss-06-suspiciously-high-metrics--verify--fix) | High | ~99.9% metrics — verify leakage / eval inflation, then fix | Open |
+| [ISS-06](#iss-06-suspiciously-high-metrics--verify--fix) | High | ~99.9% metrics — verify leakage / eval inflation, then fix | Done |
 | [ISS-07](#iss-07-duplicateexperimental-training-scripts) | Low | Duplicate / experimental training scripts | Open |
 | [ISS-08](#iss-08-api-error-handling--observability) | Low | Opaque 500s; no health/ready endpoints | Open |
 | [ISS-09](#iss-09-mcp-path-diverges-from-canonical-serve) | Low | `mcp/` alternate path diverges | Open |
@@ -178,86 +178,35 @@ Custom `DataPreprocessor` paths called `scaler.fit_transform` on the **first 10�
 ## ISS-06: Suspiciously high metrics — verify & fix
 
 **Severity:** High (investigation + training correctness)  
-**Status:** Open  
-**Where:** `models/model_20250728_222231/metadata.json`, `train_model.py`, `train_model_quantized_no_customclass.py`
+**Status:** Done — see [`ISS06_VERIFICATION.md`](ISS06_VERIFICATION.md)  
+**Where:** `scripts/verify_iss06.py`, `train_model_quantized_no_customclass.py`, `model_bundle.py`, `models/model_20260713_162252/`
 
-### Symptom
+### Outcome
 
-Checked-in bundle reports near-perfect scores on all three classifiers:
+Weighted ~99.9% accuracy on ACI is **largely real (suspect C)** under random stratified eval, not mainly fit-all leakage. Honest full retrain without ports still ≈99.7–99.9% weighted, but **macro F1 ≈0.90** because rare **ARP Spoofing** fails (test support=1).
 
-| Model | Accuracy (metadata) |
-|-------|---------------------|
-| random_forest | ~0.9996 |
-| xgboost | ~0.9988 |
-| lightgbm | ~0.9995 |
+| Suspect | Result |
+|---------|--------|
+| A fit-all before split | Closed in code; Δ≈0 on subsample |
+| B Src/Dst Port | Dropped in release trainer; small Δ |
+| C easy separation | **Primary** |
+| D global-only metrics | Fixed via per-class artifacts |
+| E temporal/group | Not pursued |
 
-That is a **suspect case**: either the task is truly easy with these features, or (more likely) evaluation is inflated by leakage / protocol mistakes. We should **verify first**, then fix whatever the evidence supports—not blindly lower accuracy.
+### Fix applied
 
-### Concrete suspects (code-backed)
-
-| Suspect | Evidence in repo | Why it inflates metrics |
-|---------|------------------|-------------------------|
-| **A. Fit preprocessor on full dataset before split** | `train_model*.py`: `preprocess` / `ColumnTransformer.fit_transform(X)` runs on **all rows**, then `train_test_split` | Scaler mean/variance and one-hot categories see test rows → optimistic test scores |
-| **B. Identifier / high-cardinality leftovers** | Drop list removes `Flow ID`, `Src IP`, `Dst IP`, `Timestamp`, rates — but **`Src Port` / `Dst Port`** (and similar) remain in MLflow input examples | Ports / hosts often proxy attack type in lab datasets → near-memorization |
-| **C. Easy lab separation** | ACI-IoT-2023 is a controlled capture; many CIC-style features are strongly class-conditional | High accuracy can be real; must show with honest holdout |
-| **D. Global accuracy only** | Trainer logs accuracy / macro-ish aggregates; no per-class report in model metadata | Rare attack classes may be wrong while majority “Benign” inflates accuracy |
-| **E. Chunk / order artifacts** | CSV loaded in file order; random split mixes times | Related flows land in both sets (group leakage) |
-
-Suspect **A** is the strongest code smell and should be fixed regardless of whether accuracy stays high after an honest re-eval.
-
-### Verification plan (do this before / while fixing)
-
-Work through these checks; record results under `docs/` or in the model `metadata.json` when done.
-
-1. **Baseline reproduce**  
-   Retrain with current code; confirm metrics still ≈99.9%. If not reproducible, note env/data drift.
-
-2. **Leakage check A — fit on train only**  
-   Split **raw** rows first (`train_test_split` on dataframe indices).  
-   `fit` preprocessor on train only; `transform` train and test.  
-   Retrain; compare test accuracy / F1 to baseline.  
-   - Large drop → A confirmed.  
-   - Still ~99.9% → look at B/C/E.
-
-3. **Feature ablation B**  
-   Retrain with an extended drop list, e.g. also remove:  
-   `Src Port`, `Dst Port`, and any remaining ID-like or absolute address columns.  
-   Optionally drop protocol if it is nearly label-deterministic.  
-   Compare metrics and top feature importances (RF / LGBM `feature_importances_`).
-
-4. **Per-class report D**  
-   Save `classification_report` + confusion matrix for the test set.  
-   Check whether minority attack classes are actually learned or only majority classes drive accuracy.
-
-5. **Harder holdout C/E (optional but recommended)**  
-   - Time-ordered split (train earlier flows, test later), **or**  
-   - Group split by a flow/session key if one exists, **or**  
-   - External held-out CSV shard never seen during fit.  
-   Report this as the “honest” score next to the random stratified split.
-
-6. **Sanity: shuffle-label control**  
-   Train once with randomly shuffled labels; test accuracy should collapse toward chance.  
-   If it stays high, the metric pipeline itself is wrong (bug), not leakage.
-
-### Probable fixes (apply based on verification)
-
-| If verified… | Fix |
-|--------------|-----|
-| **A** | Always `train_test_split` (or CV folds) on raw data **before** fitting scaler / encoder / imputer. Persist only train-fitted preprocessor. |
-| **B** | Expand documented drop list; retrain; store `feature_names` + importances in metadata. |
-| **D** | Log and save per-class metrics + confusion matrix into the model bundle / MLflow. Stop treating single accuracy as the headline. |
-| **E** | Prefer time- or group-based split for the reported “release” metrics; keep random split only as a secondary number. |
-| **C only** | Document that ACI features are highly separable; still ship honest holdout metrics and the shuffle-label sanity result. |
-
-Also re-run after **ISS-04** (full scaler fit) so scaling bugs are not confounded with leakage results.
+1. Phases 1–2 verification harness + notes  
+2. Canonical trainer: train-only preprocess, drop ports, classification reports  
+3. New release bundle `model_20260713_162252` (`evaluation_protocol: train_only_preprocess_v1`)  
+4. Historical `model_20250728_222231` kept (leaky protocol / ports)
 
 ### Acceptance
 
-- [ ] Verification notes recorded (which suspects confirmed / rejected).  
-- [ ] Preprocessor is fit **only** on training folds/split (suspect A closed in code).  
-- [ ] Drop / keep feature policy documented (README or this file).  
-- [ ] Model bundle includes classification report (or equivalent) + confusion matrix artifact.  
-- [ ] Reported “release” metrics come from the honest protocol (train-only fit + chosen holdout); old ~99.9% figures either reproduced under that protocol or explicitly marked obsolete.
+- [x] Verification notes recorded  
+- [x] Preprocessor fit on train only  
+- [x] Drop/keep policy documented (README + this file + verification log)  
+- [x] Bundle includes classification reports + confusion matrices  
+- [x] Honest-protocol release metrics published; old bundle marked historical  
 
 ---
 
