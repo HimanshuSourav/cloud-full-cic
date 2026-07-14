@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 mlruns/
+
+# External alternate project (ISS-09) — optional local clone only
+mcp/

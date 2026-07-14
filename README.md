@@ -5,6 +5,9 @@ This document describes **what exists today** (components, flows, contracts). Kn
 
 > **Note:** `iot_anomaly_detection.tar` is gitignored (exceeds GitHub’s file size limit) and is not published with this repository.
 
+**Production serve path (this repo):** Docker builds root [`Dockerfile`](Dockerfile) → `uvicorn deploy_api:app` on `:8000`, loading `models/model_*` via [`model_bundle.py`](model_bundle.py).  
+Anything under an optional local `mcp/` clone is a **separate project** and is not the Docker entrypoint (see [§8](#8-alternate-path--external-mcp-project)).
+
 ---
 
 ## 1. Purpose
@@ -27,7 +30,7 @@ Primary stack:
 ```
 docker-deploy/
 ├── train_model.py                          # Canonical trainer (sklearn ColumnTransformer → save_bundle)
-├── deploy_api.py                           # Production-oriented FastAPI app (used by Dockerfile)
+├── deploy_api.py                           # Production FastAPI app (Dockerfile CMD)
 ├── model_bundle.py                         # Shared load/save contract for model artifacts
 ├── preproc_scale.py                        # Streaming StandardScaler helper (legacy trainer)
 ├── Dockerfile                              # Multi-stage image for deploy_api
@@ -42,7 +45,6 @@ docker-deploy/
 ├── experiments/                            # Non-canonical / historical scripts only
 │   ├── train_model_custom_preprocessor.py  # Legacy custom DataPreprocessor path
 │   └── quantize_tflite.py                  # TFLite float16 conversion (experimental)
-├── mcp/                                    # Alternate FastAPI + MCP-style wrapper (separate nested git repo)
 └── iot_anomaly_detection.tar               # Large Docker image archive (gitignored)
 ```
 
@@ -52,7 +54,9 @@ Canonical paths for the baseline:
 |---------|----------------|
 | Train | `train_model.py` |
 | Serve | `deploy_api.py` |
-| Container | `Dockerfile` |
+| Container | `Dockerfile` → `uvicorn deploy_api:app` |
+
+`mcp/` is **not** part of this tree (gitignored optional clone of a separate GitHub repo).
 
 ---
 
@@ -295,26 +299,25 @@ Optional env:
 
 ---
 
-## 8. Alternate path — `mcp/`
+## 8. Alternate path — external MCP project
 
-Nested package with a smaller dependency set and a slightly different contract. Useful reference, not the Dockerfile entrypoint.
+**Not maintained in this repository.** A historically related FastAPI + MCP-style wrapper lives in a **separate** GitHub project:
 
-| File | Role |
-|------|------|
-| `mcp/deploy_fastapi.py` | FastAPI app; loads `models/preprocessor.joblib` + `models/random_forest.joblib` (paths relative to `mcp/`) |
-| `mcp/preprocessor.py` | Custom `DataPreprocessor` (similar concepts to root trainer) |
-| `mcp/mcp_wrapper.py` | Thin `MCPModel` class: load + `predict(input_dict)` |
-| `mcp/requirements.txt` | fastapi, uvicorn, joblib, pydantic, scikit-learn, pandas, tqdm |
+https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection
 
-Endpoints:
+| This repo (`docker-deploy`) | External MCP repo |
+|-----------------------------|-------------------|
+| `deploy_api.py` + `model_bundle.py` | Its own `deploy_fastapi.py` / wrapper |
+| `sklearn_column_transformer_v1` bundles under `models/model_*` | Own `models/*.joblib` layout |
+| Root `Dockerfile` serve path | Different deps / schema / response shape |
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `POST` | `/predict` | Inference; body uses spaced aliases (`Total Fwd Packets`, …) |
-| `GET` | `/metadata` | Static model/MCP metadata |
-| `GET` | `/schema` | Input/output field documentation |
+Optional local clone (gitignored here so it is not dual-maintained by accident):
 
-Response is `{ "prediction": <numeric or list> }` (raw model output, not decoded labels).
+```bash
+git clone https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection.git mcp
+```
+
+Do **not** point production Docker or CI at `mcp/`.
 
 ---
 

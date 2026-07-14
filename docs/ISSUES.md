@@ -23,7 +23,7 @@ This catalog reflects defects found in the Jul 2026 review. Fix work proceeds **
 | [ISS-06](#iss-06-suspiciously-high-metrics--verify--fix) | High | ~99.9% metrics — verify leakage / eval inflation, then fix | Done |
 | [ISS-07](#iss-07-duplicateexperimental-training-scripts) | Low | Duplicate / experimental training scripts | Done |
 | [ISS-08](#iss-08-api-error-handling--observability) | Low | Opaque 500s; unclear client errors | Done |
-| [ISS-09](#iss-09-mcp-path-diverges-from-canonical-serve) | Low | `mcp/` alternate path diverges | Open |
+| [ISS-09](#iss-09-mcp-path-diverges-from-canonical-serve) | Low | `mcp/` alternate path diverges | Done |
 
 Suggested fix order:
 
@@ -266,22 +266,26 @@ Near-duplicate trainers (`train_model.py`, `train_model_quantized.py`, `train_mo
 ## ISS-09: `mcp/` path diverges from canonical serve
 
 **Severity:** Low  
-**Status:** Open  
-**Where:** `mcp/` (nested layout; spaced column names in its FastAPI schema)
+**Status:** Done  
+**Where:** README, `.gitignore` (external MCP repo)
 
 ### Problem
 
-Alternate FastAPI + wrapper uses different contracts and dependencies. Easy to confuse with production `deploy_api.py` + root `Dockerfile`.
+An alternate FastAPI + wrapper used different contracts and dependencies. Sitting as an untracked nested clone under `mcp/` made it easy to confuse with production `deploy_api.py` + root `Dockerfile`, and invited silent dual maintenance.
 
-### Probable fix
+### Fix applied
 
-1. Document clearly as non-canonical (already started in README).
-2. Later: either sync to the same `load_bundle` helper or isolate as a separate package with its own docs.
+1. Documented production serve path at the top of the README: root `Dockerfile` → `deploy_api:app` only.
+2. Replaced in-tree `mcp/` docs with an explicit **external project** section linking to  
+   https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection  
+   and a side-by-side contract contrast table.
+3. Gitignored `mcp/` so an optional local clone is not absorbed into this repo.
+4. Removed `mcp/` from the repository layout tree.
 
 ### Acceptance
 
-- Contributors can tell which entrypoint Docker uses without reading two codepaths.
-- No silent dual maintenance requirement unless intentional.
+- [x] Contributors can tell which entrypoint Docker uses without reading two codepaths.
+- [x] No silent dual maintenance requirement (MCP kept as a separate repo; not tracked here).
 
 ---
 
