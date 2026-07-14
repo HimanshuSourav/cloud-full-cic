@@ -29,7 +29,7 @@ Artifacts: [`iss06_results/phase2/`](iss06_results/phase2/)
 
 ## Phase 3 — Trainer hardened (done)
 
-Canonical [`train_model_quantized_no_customclass.py`](../train_model_quantized_no_customclass.py):
+Canonical [`train_model.py`](../train_model.py) (formerly `train_model_quantized_no_customclass.py`):
 
 - Split **raw** rows first; fit preprocessor + label encoder on **train only**
 - Drop `Src Port` / `Dst Port` (plus prior ID/time drops)

@@ -2,7 +2,7 @@
 """ISS-06 verification harness.
 
 Phase 1: reproduce the *current* leaky training protocol without editing
-train_model_quantized_no_customclass.py.
+train_model.py.
 
 Later phases add honest-fit / no-ports / shuffle ablations via --configs.
 """
@@ -48,7 +48,7 @@ PORT_COLS = ["Src Port", "Dst Port"]
 
 
 def enhance_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Match train_model_quantized_no_customclass.enhance_features."""
+    """Match train_model.enhance_features."""
     df = df.copy()
     if "Total Fwd Packets" in df.columns and "Total Backward Packets" in df.columns:
         df["packet_ratio"] = np.divide(

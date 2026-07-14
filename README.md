@@ -26,12 +26,10 @@ Primary stack:
 
 ```
 docker-deploy/
-├── train_model.py                          # Main training pipeline (custom DataPreprocessor)
-├── train_model_quantized.py                # Near-duplicate of train_model.py
-├── train_model_quantized_no_customclass.py # Sklearn Pipeline / ColumnTransformer variant
-├── quantize.py                             # TFLite float16 conversion script (experimental)
+├── train_model.py                          # Canonical trainer (sklearn ColumnTransformer → save_bundle)
 ├── deploy_api.py                           # Production-oriented FastAPI app (used by Dockerfile)
 ├── model_bundle.py                         # Shared load/save contract for model artifacts
+├── preproc_scale.py                        # Streaming StandardScaler helper (legacy trainer)
 ├── Dockerfile                              # Multi-stage image for deploy_api
 ├── Original.Dockerfile                     # Earlier single-stage Dockerfile (legacy)
 ├── requirements-serve.txt                  # Pinned deps for Docker / API
@@ -41,6 +39,9 @@ docker-deploy/
 │   ├── model_20260713_162252/              # Honest-protocol release bundle (latest)
 │   └── model_20250728_222231/              # Historical leaky-protocol bundle
 ├── mlruns/                                 # Local MLflow run store
+├── experiments/                            # Non-canonical / historical scripts only
+│   ├── train_model_custom_preprocessor.py  # Legacy custom DataPreprocessor path
+│   └── quantize_tflite.py                  # TFLite float16 conversion (experimental)
 ├── mcp/                                    # Alternate FastAPI + MCP-style wrapper (separate nested git repo)
 └── iot_anomaly_detection.tar               # Large Docker image archive (gitignored)
 ```
@@ -49,8 +50,7 @@ Canonical paths for the baseline:
 
 | Concern | Canonical file |
 |---------|----------------|
-| Train (custom preprocessor) | `train_model.py` |
-| Train (sklearn pipeline) | `train_model_quantized_no_customclass.py` |
+| Train | `train_model.py` |
 | Serve | `deploy_api.py` |
 | Container | `Dockerfile` |
 
@@ -127,18 +127,13 @@ Canonical raw ACI names used at serve time include singular forms such as `Total
 
 ### Run training
 
-**Custom preprocessor path** (legacy / experiments):
+**Canonical path** (ISS-03/06/07 — train-only preprocess, drop ports, `save_bundle`):
 
 ```bash
 python train_model.py
 ```
 
-**Canonical sklearn path** (ISS-03/06 — train-only preprocess, drop ports, per-class reports):
-
-```bash
-python train_model_quantized_no_customclass.py
-```
-
+Legacy custom-preprocessor and TFLite scripts live under `experiments/` and are **not** on the Docker serve path.
 ### Models trained
 
 | Key | Algorithm | Default notes |
@@ -318,11 +313,11 @@ Response is `{ "prediction": <numeric or list> }` (raw model output, not decoded
 
 | Script | Intent |
 |--------|--------|
-| `quantize.py` | Convert a TensorFlow SavedModel directory to float16 TFLite |
-| `train_model_quantized.py` | Same structure as `train_model.py` (quantization/experiment naming) |
+| `experiments/train_model_custom_preprocessor.py` | Legacy custom `DataPreprocessor` trainer (does **not** write `sklearn_column_transformer_v1`) |
+| `experiments/quantize_tflite.py` | Convert a TensorFlow SavedModel directory to float16 TFLite |
 | `Original.Dockerfile` | Older image; CMD references `main:app` (superseded by current `Dockerfile`) |
 
-These are not required for the baseline train → Docker serve path.
+These are not required for the baseline train → Docker serve path. Only `train_model.py` produces the serve bundle via `model_bundle.save_bundle`.
 
 ---
 

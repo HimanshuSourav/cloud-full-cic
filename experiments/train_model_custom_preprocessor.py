@@ -1,3 +1,17 @@
+"""Legacy custom DataPreprocessor trainer (non-canonical).
+
+Does not write the sklearn_column_transformer_v1 serve bundle.
+Canonical trainer: ../train_model.py
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta

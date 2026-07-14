@@ -1,3 +1,7 @@
+"""Experimental TFLite float16 conversion (not on the Docker serve path).
+
+Hardcoded SavedModel path is historical; update before running.
+"""
 import tensorflow as tf
 
 # Set the path to your SavedModel directory
