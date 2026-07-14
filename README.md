@@ -277,6 +277,15 @@ At **process startup** (FastAPI lifespan):
 Each `/predict` reuses that cache (no per-request disk reload).  
 Also available: `GET /health` (liveness), `GET /ready` (artifacts loaded).
 
+Error status codes (ISS-08):
+
+| Status | When |
+|--------|------|
+| `404` | Unknown `model_name` (detail lists available models) |
+| `422` | Missing / invalid JSON body fields |
+| `400` | Feature transform / encode failed (actionable `detail`) |
+| `503` | Artifacts not loaded (`/ready` and `/predict`) |
+| `500` | Unexpected server error |
 Optional env:
 
 | Variable | Default | Purpose |

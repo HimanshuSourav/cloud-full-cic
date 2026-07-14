@@ -22,7 +22,7 @@ This catalog reflects defects found in the Jul 2026 review. Fix work proceeds **
 | [ISS-05](#iss-05-bloated-serving-image--unpinned-deps) | Medium | Bloated serving image / unpinned deps | Done |
 | [ISS-06](#iss-06-suspiciously-high-metrics--verify--fix) | High | ~99.9% metrics — verify leakage / eval inflation, then fix | Done |
 | [ISS-07](#iss-07-duplicateexperimental-training-scripts) | Low | Duplicate / experimental training scripts | Done |
-| [ISS-08](#iss-08-api-error-handling--observability) | Low | Opaque 500s; no health/ready endpoints | Open |
+| [ISS-08](#iss-08-api-error-handling--observability) | Low | Opaque 500s; unclear client errors | Done |
 | [ISS-09](#iss-09-mcp-path-diverges-from-canonical-serve) | Low | `mcp/` alternate path diverges | Open |
 
 Suggested fix order:
@@ -237,26 +237,29 @@ Near-duplicate trainers (`train_model.py`, `train_model_quantized.py`, `train_mo
 ## ISS-08: API error handling & observability
 
 **Severity:** Low  
-**Status:** Open  
+**Status:** Done  
 **Where:** `deploy_api.py`
 
 ### Problem
 
-- Exceptions are logged then rethrown as a generic `"Prediction failed."` — clients cannot distinguish bad input vs missing model vs contract errors.
-- No `/health` or `/ready`.
-- Pydantic v1-style `schema_extra` / `.dict()` may need updating depending on installed Pydantic major version.
+- Exceptions were logged then rethrown as a generic `"Prediction failed."` — clients could not distinguish bad input vs missing model vs contract errors.
+- Originally no `/health` or `/ready` (added under ISS-02; kept here as acceptance).
+- Dual Pydantic v1/v2 `InputData` shims after pins made the v1 path dead code.
 
-### Probable fix
+### Fix applied
 
-1. Map known failures to 4xx with clear messages (unknown `model_name`, schema/column mismatch).
-2. Add health/ready (pairs with ISS-02).
-3. Align Pydantic v1/v2 APIs intentionally and pin the version (pairs with ISS-05).
+1. Unknown `model_name` → **404** with available model list in `detail`.
+2. Feature transform / encode failures (`ValueError` / `KeyError` / `TypeError`) → **400** with actionable message (`Invalid feature payload: …`).
+3. Missing / invalid body fields → FastAPI/Pydantic **422** (unchanged).
+4. Confirmed `GET /health` (liveness) and `GET /ready` (artifacts loaded).
+5. Dropped unused Pydantic v1 branch; serve pins `pydantic==2.10.6` (`requirements-serve.txt`).
+6. Covered by `tests/test_iss08_api_errors.py`.
 
 ### Acceptance
 
-- Invalid model name → 404 with detail.
-- Schema mismatch → 422/400 with actionable message.
-- `/health` returns 200 when process is up.
+- [x] Unknown model name → 404 with detail.
+- [x] Schema mismatch → 422 (body) / 400 (transform) with actionable message.
+- [x] `/health` returns 200 when process is up.
 
 ---
 

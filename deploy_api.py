@@ -1,11 +1,11 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 import uvicorn
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 import pandas as pd
 import os
 import logging
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from model_bundle import (
     ModelBundle,
@@ -19,6 +19,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 # Process-wide artifact cache (ISS-02): loaded once at startup, reused by /predict.
 MODEL_BASE_PATH = os.environ.get("MODEL_BASE_PATH", "models")
 DEFAULT_MODEL_NAME = os.environ.get("DEFAULT_MODEL_NAME", "random_forest")
+
+# Client-side failures during feature transform / encode (ISS-08).
+_CLIENT_PREDICT_ERRORS = (ValueError, KeyError, TypeError)
 
 _bundle: Optional[ModelBundle] = None
 _ready: bool = False
@@ -50,91 +53,46 @@ PREDICT_EXAMPLE = {
 }
 
 
-try:
-    from pydantic import ConfigDict, model_validator
+class InputData(BaseModel):
+    """Core flow features; accepts ACI names and legacy plural/underscore aliases."""
 
-    class InputData(BaseModel):
-        """Core flow features; accepts ACI names and legacy plural/underscore aliases."""
+    model_config = ConfigDict(
+        populate_by_name=True,
+        json_schema_extra={"example": PREDICT_EXAMPLE},
+    )
 
-        model_config = ConfigDict(
-            populate_by_name=True,
-            json_schema_extra={"example": PREDICT_EXAMPLE},
-        )
+    total_fwd_packet: float = Field(
+        ..., alias="Total Fwd Packet", description="Total number of forward packets"
+    )
+    total_bwd_packets: float = Field(
+        ...,
+        alias="Total Bwd packets",
+        description="Total number of backward packets",
+    )
+    total_length_of_fwd_packet: float = Field(
+        ...,
+        alias="Total Length of Fwd Packet",
+        description="Total size of forward packets",
+    )
+    total_length_of_bwd_packet: float = Field(
+        ...,
+        alias="Total Length of Bwd Packet",
+        description="Total size of backward packets",
+    )
+    flow_duration: float = Field(
+        ..., alias="Flow Duration", description="Duration of the flow in microseconds"
+    )
 
-        total_fwd_packet: float = Field(
-            ..., alias="Total Fwd Packet", description="Total number of forward packets"
-        )
-        total_bwd_packets: float = Field(
-            ...,
-            alias="Total Bwd packets",
-            description="Total number of backward packets",
-        )
-        total_length_of_fwd_packet: float = Field(
-            ...,
-            alias="Total Length of Fwd Packet",
-            description="Total size of forward packets",
-        )
-        total_length_of_bwd_packet: float = Field(
-            ...,
-            alias="Total Length of Bwd Packet",
-            description="Total size of backward packets",
-        )
-        flow_duration: float = Field(
-            ..., alias="Flow Duration", description="Duration of the flow in microseconds"
-        )
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_keys(cls, values: Any) -> Any:
+        if isinstance(values, Mapping):
+            return normalize_request_columns(values)
+        return values
 
-        @model_validator(mode="before")
-        @classmethod
-        def _normalize_legacy_keys(cls, values: Any) -> Any:
-            if isinstance(values, Mapping):
-                return normalize_request_columns(values)
-            return values
-
-        def to_feature_frame(self) -> pd.DataFrame:
-            raw = normalize_request_columns(self.model_dump(by_alias=True))
-            return pd.DataFrame([raw])
-
-except ImportError:
-    from pydantic import root_validator
-
-    class InputData(BaseModel):
-        """Core flow features; accepts ACI names and legacy plural/underscore aliases."""
-
-        total_fwd_packet: float = Field(
-            ..., alias="Total Fwd Packet", description="Total number of forward packets"
-        )
-        total_bwd_packets: float = Field(
-            ...,
-            alias="Total Bwd packets",
-            description="Total number of backward packets",
-        )
-        total_length_of_fwd_packet: float = Field(
-            ...,
-            alias="Total Length of Fwd Packet",
-            description="Total size of forward packets",
-        )
-        total_length_of_bwd_packet: float = Field(
-            ...,
-            alias="Total Length of Bwd Packet",
-            description="Total size of backward packets",
-        )
-        flow_duration: float = Field(
-            ..., alias="Flow Duration", description="Duration of the flow in microseconds"
-        )
-
-        class Config:
-            allow_population_by_field_name = True
-            schema_extra = {"example": PREDICT_EXAMPLE}
-
-        @root_validator(pre=True)
-        def _normalize_legacy_keys(cls, values: Any) -> Any:  # noqa: N805
-            if isinstance(values, Mapping):
-                return normalize_request_columns(values)
-            return values
-
-        def to_feature_frame(self) -> pd.DataFrame:
-            raw = normalize_request_columns(self.dict(by_alias=True))
-            return pd.DataFrame([raw])
+    def to_feature_frame(self) -> pd.DataFrame:
+        raw = normalize_request_columns(self.model_dump(by_alias=True))
+        return pd.DataFrame([raw])
 
 
 def load_artifacts_into_cache(base_path: str = MODEL_BASE_PATH) -> None:
@@ -202,7 +160,14 @@ async def predict(input_data: InputData, model_name: Optional[str] = None):
         bundle = _bundle
         model = bundle.models.get(model_name)
         if not model:
-            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found.")
+            available = sorted(bundle.models.keys())
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Model '{model_name}' not found. "
+                    f"Available models: {available}"
+                ),
+            )
 
         input_df = input_data.to_feature_frame()
         X_input = transform_raw(bundle, input_df)
@@ -225,9 +190,15 @@ async def predict(input_data: InputData, model_name: Optional[str] = None):
 
     except HTTPException:
         raise
+    except _CLIENT_PREDICT_ERRORS as e:
+        logging.warning("Invalid prediction payload: %s", e)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid feature payload: {e}",
+        ) from e
     except Exception as e:
-        logging.error(f"Prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Prediction failed.")
+        logging.error("Prediction error: %s", e)
+        raise HTTPException(status_code=500, detail="Prediction failed.") from e
 
 
 if __name__ == "__main__":
