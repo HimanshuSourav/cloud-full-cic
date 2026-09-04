@@ -97,7 +97,7 @@ Every `/predict` reloaded all `.joblib` models plus the preprocessor from disk. 
 
 **Severity:** Critical  
 **Status:** Done  
-**Where:** `model_bundle.py`, `deploy_api.py`, `train_model.py` (then named `train_model_quantized_no_customclass.py`), `models/model_20250728_222231/`
+**Where:** `model_bundle.py`, `deploy_api.py`, `train_model.py` (then named `train_model_quantized_no_customclass.py`), `models/model_20250728_222231_full_cic_leaky/`
 
 ### Problem
 
@@ -179,7 +179,7 @@ Custom `DataPreprocessor` paths called `scaler.fit_transform` on the **first 10�
 
 **Severity:** High (investigation + training correctness)  
 **Status:** Done — see [`ISS06_VERIFICATION.md`](ISS06_VERIFICATION.md)  
-**Where:** `scripts/verify_iss06.py`, `train_model.py`, `model_bundle.py`, `models/model_20260713_162252/`
+**Where:** `scripts/verify_iss06.py`, `train_model.py`, `model_bundle.py`, `models/model_20260713_162252_full_cic_honest/`
 
 ### Outcome
 
@@ -197,8 +197,8 @@ Weighted ~99.9% accuracy on ACI is **largely real (suspect C)** under random str
 
 1. Phases 1–2 verification harness + notes  
 2. Canonical trainer: train-only preprocess, drop ports, classification reports  
-3. New release bundle `model_20260713_162252` (`evaluation_protocol: train_only_preprocess_v1`)  
-4. Historical `model_20250728_222231` kept (leaky protocol / ports)
+3. New release bundle `model_20260713_162252_full_cic_honest` (`evaluation_protocol: train_only_preprocess_v1`)  
+4. Historical `model_20250728_222231_full_cic_leaky` kept (leaky protocol / ports)
 
 ### Acceptance
 

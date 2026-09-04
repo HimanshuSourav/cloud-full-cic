@@ -28,7 +28,7 @@ Primary stack:
 ## 2. Repository layout
 
 ```
-docker-deploy/
+cloud-full-cic/
 ├── train_model.py                          # Canonical trainer (sklearn ColumnTransformer → save_bundle)
 ├── deploy_api.py                           # Production FastAPI app (Dockerfile CMD)
 ├── model_bundle.py                         # Shared load/save contract for model artifacts
@@ -39,8 +39,8 @@ docker-deploy/
 ├── requirements-train.txt                  # Pinned deps for training (+ serve)
 ├── requirements.txt                        # Alias → requirements-train.txt
 ├── models/
-│   ├── model_20260713_162252/              # Honest-protocol release bundle (latest)
-│   └── model_20250728_222231/              # Historical leaky-protocol bundle
+│   ├── model_20260713_162252_full_cic_honest/              # Honest-protocol release bundle (latest)
+│   └── model_20250728_222231_full_cic_leaky/              # Historical leaky-protocol bundle
 ├── mlruns/                                 # Local MLflow run store
 ├── experiments/                            # Non-canonical / historical scripts only
 │   ├── train_model_custom_preprocessor.py  # Legacy custom DataPreprocessor path
@@ -152,7 +152,7 @@ Per model: accuracy, precision, recall, F1 weighted + F1 macro.
 Also `classification_reports.json` / `confusion_matrices.json` in the model folder.  
 Scalar metrics in `metadata.json` and MLflow under `mlruns/`.
 
-### Release metrics (`model_20260713_162252`, honest protocol)
+### Release metrics (`model_20260713_162252_full_cic_honest`, honest protocol)
 
 `evaluation_protocol: train_only_preprocess_v1` — split raw first, fit preprocess on train only, ports dropped.
 
@@ -164,7 +164,7 @@ Scalar metrics in `metadata.json` and MLflow under `mlruns/`.
 
 Macro F1 is lower mainly due to ultra-rare **ARP Spoofing**. See [`docs/ISS06_VERIFICATION.md`](docs/ISS06_VERIFICATION.md).
 
-### Historical metrics (`model_20250728_222231`, leaky protocol)
+### Historical metrics (`model_20250728_222231_full_cic_leaky`, leaky protocol)
 
 Fit-all-then-split; ports kept. Kept for comparison only.
 
@@ -305,7 +305,7 @@ Optional env:
 
 https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection
 
-| This repo (`docker-deploy`) | External MCP repo |
+| This repo (`cloud-full-cic`) | External MCP repo |
 |-----------------------------|-------------------|
 | `deploy_api.py` + `model_bundle.py` | Its own `deploy_fastapi.py` / wrapper |
 | `sklearn_column_transformer_v1` bundles under `models/model_*` | Own `models/*.joblib` layout |

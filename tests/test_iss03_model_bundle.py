@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 import deploy_api
 from model_bundle import align_raw_features, load_bundle, transform_raw
 
-BUNDLE_DIR = Path("models/model_20250728_222231")
+BUNDLE_DIR = Path("models/model_20250728_222231_full_cic_leaky")
 
 
 def test_load_bundle_resolves_label_encoder_and_metadata():
