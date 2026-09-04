@@ -301,17 +301,20 @@ Optional env:
 
 ## 8. Alternate path — external MCP project
 
-**Not maintained in this repository.** A historically related FastAPI + MCP-style wrapper lives in a **separate** GitHub project:
+**Not the Docker entrypoint.** A separate GitHub project now hosts a real
+stdio [MCP](https://modelcontextprotocol.io) server that **HTTP-proxies**
+this API (and `r7000-overlap`) instead of loading its own joblib stack:
 
 https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection
 
+Local clone (gitignored here so it is not dual-maintained): `mcp/`.
+See that repo’s `README.md`. The 2025 FastAPI files that
+only *claimed* MCP live under `mcp/legacy/`.
+
 | This repo (`cloud-full-cic`) | External MCP repo |
 |-----------------------------|-------------------|
-| `deploy_api.py` + `model_bundle.py` | Its own `deploy_fastapi.py` / wrapper |
-| `sklearn_column_transformer_v1` bundles under `models/model_*` | Own `models/*.joblib` layout |
-| Root `Dockerfile` serve path | Different deps / schema / response shape |
-
-Optional local clone (gitignored here so it is not dual-maintained by accident):
+| `deploy_api.py` + `model_bundle.py` | `server.py` tools → `POST /predict` |
+| Root `Dockerfile` serve path | Does not replace Docker |
 
 ```bash
 git clone https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection.git mcp
