@@ -6,7 +6,7 @@ This document describes **what exists today** (components, flows, contracts). Kn
 > **Note:** `iot_anomaly_detection.tar` is gitignored (exceeds GitHub’s file size limit) and is not published with this repository.
 
 **Production serve path (this repo):** Docker builds root [`Dockerfile`](Dockerfile) → `uvicorn deploy_api:app` on `:8000`, loading `models/model_*` via [`model_bundle.py`](model_bundle.py).  
-Anything under an optional local `mcp/` clone is a **separate project** and is not the Docker entrypoint (see [§8](#8-alternate-path--external-mcp-project)).
+The MCP agent layer is a **sibling** clone under `aci-iot-nids/mcp` (see [§8](#8-alternate-path--external-mcp-project)), not this Docker image.
 
 ---
 
@@ -56,7 +56,7 @@ Canonical paths for the baseline:
 | Serve | `deploy_api.py` |
 | Container | `Dockerfile` → `uvicorn deploy_api:app` |
 
-`mcp/` is **not** part of this tree (gitignored optional clone of a separate GitHub repo).
+`mcp/` is **not** part of this tree. Clone it as a sibling under `aci-iot-nids/`.
 
 ---
 
@@ -299,27 +299,19 @@ Optional env:
 
 ---
 
-## 8. Alternate path — external MCP project
+## 8. Agent path — sibling MCP project
 
-**Not the Docker entrypoint.** A separate GitHub project now hosts a real
-stdio [MCP](https://modelcontextprotocol.io) server that **HTTP-proxies**
-this API (and `r7000-overlap`) instead of loading its own joblib stack:
+**Not the Docker entrypoint.** Clone the MCP server **next to** this repo
+(under `aci-iot-nids/`), not inside it:
 
-https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection
-
-Local clone (gitignored here so it is not dual-maintained): `mcp/`.
-See that repo’s `README.md`. The 2025 FastAPI files that
-only *claimed* MCP live under `mcp/legacy/`.
-
-| This repo (`cloud-full-cic`) | External MCP repo |
-|-----------------------------|-------------------|
-| `deploy_api.py` + `model_bundle.py` | `server.py` tools → `POST /predict` |
-| Root `Dockerfile` serve path | Does not replace Docker |
+https://github.com/HimanshuSourav/aci-iot-nids-mcp
 
 ```bash
-git clone https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection.git mcp
+cd /home/hsourav/aci-iot-nids
+git clone https://github.com/HimanshuSourav/aci-iot-nids-mcp.git mcp
 ```
 
+It HTTP-proxies this API (`:8000`) and `edge-r7000` (`:8001`).
 Do **not** point production Docker or CI at `mcp/`.
 
 ---

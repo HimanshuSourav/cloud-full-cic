@@ -277,7 +277,7 @@ An alternate FastAPI + wrapper used different contracts and dependencies. Sittin
 
 1. Documented production serve path at the top of the README: root `Dockerfile` → `deploy_api:app` only.
 2. Replaced in-tree `mcp/` docs with an explicit **external project** section linking to  
-   https://github.com/HimanshuSourav/MCP-Compliant-IoT-Network-Anomaly-Detection  
+   https://github.com/HimanshuSourav/aci-iot-nids-mcp  
    and a side-by-side contract contrast table.
 3. Gitignored `mcp/` so an optional local clone is not absorbed into this repo.
 4. Removed `mcp/` from the repository layout tree.
